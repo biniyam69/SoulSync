@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
 import '../providers/soul_provider.dart';
+import '../providers/intent_provider.dart';
+import '../providers/morning_briefing_provider.dart';
+import '../providers/persona_provider.dart';
 import '../widgets/soul_orb.dart';
 import '../widgets/transcript_tile.dart';
 import '../widgets/waveform_widget.dart';
@@ -48,6 +51,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.bar_chart_rounded,
+                color: AppColors.textSecondary),
+            tooltip: 'Insights',
+            onPressed: () => Navigator.pushNamed(context, '/insights'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_note_rounded,
+                color: AppColors.textSecondary),
+            tooltip: 'Thought Journal',
+            onPressed: () => Navigator.pushNamed(context, '/thought-journal'),
+          ),
+          IconButton(
             icon: const Icon(Icons.nightlight_round_outlined,
                 color: AppColors.textSecondary),
             tooltip: 'Nightly Review',
@@ -79,9 +94,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Expanded(
             child: CustomScrollView(
               slivers: [
+                // Morning briefing card
+                SliverToBoxAdapter(
+                  child: _MorningBriefingCard(),
+                ),
+
                 // Orb section
                 SliverToBoxAdapter(
                   child: _OrbSection(soul: soul),
+                ),
+
+                // Open intents chip
+                SliverToBoxAdapter(
+                  child: _OpenIntentsChip(),
                 ),
 
                 // Partial transcript (live)
@@ -151,12 +176,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 // ─── Orb Section ──────────────────────────────────────────────────────────
 
-class _OrbSection extends StatelessWidget {
+class _OrbSection extends ConsumerWidget {
   final SoulState soul;
   const _OrbSection({required this.soul});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final persona = ref.watch(personaProvider);
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
@@ -173,6 +200,28 @@ class _OrbSection extends StatelessWidget {
               fontSize: 13,
               color: AppColors.textSecondary,
               letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Persona badge
+          GestureDetector(
+            onTap: () => Navigator.pushNamed(context, '/settings'),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(12),
+                border: const Border.fromBorderSide(
+                    BorderSide(color: AppColors.border, width: 0.5)),
+              ),
+              child: Text(
+                '${persona.icon} ${persona.label}',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: AppColors.textTertiary,
+                ),
+              ),
             ),
           ),
           if (soul.nextCheckinAt != null && soul.isListening) ...[
@@ -474,6 +523,136 @@ class _StatusDotState extends State<_StatusDot>
           shape: BoxShape.circle,
         ),
       ),
+    );
+  }
+}
+
+// ─── Morning Briefing Card ────────────────────────────────────────────────
+
+class _MorningBriefingCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final briefingAsync = ref.watch(morningBriefingProvider);
+    final notifier = ref.read(morningBriefingProvider.notifier);
+
+    return briefingAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (briefing) {
+        if (briefing == null || !notifier.shouldShow) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: GestureDetector(
+            onTap: () {
+              Navigator.pushNamed(
+                context,
+                '/morning-briefing',
+                arguments: briefing,
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.amber.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: AppColors.amber.withOpacity(0.3), width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  const Text('☀️', style: TextStyle(fontSize: 20)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Morning Briefing',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.amber,
+                          ),
+                        ),
+                        Text(
+                          'Tap to hear your daily briefing',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        size: 16, color: AppColors.textTertiary),
+                    onPressed: () =>
+                        ref.read(morningBriefingProvider.notifier).dismiss(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Open Intents Chip ────────────────────────────────────────────────────
+
+class _OpenIntentsChip extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final intentsAsync = ref.watch(intentProvider);
+
+    return intentsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (intents) {
+        final openCount = intents.where((i) => i.isOpen).length;
+        if (openCount == 0) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: GestureDetector(
+            onTap: () => Navigator.pushNamed(context, '/intents'),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: const Border.fromBorderSide(
+                    BorderSide(color: AppColors.border, width: 0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_box_outlined,
+                      size: 14, color: AppColors.amber),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$openCount open commitment${openCount == 1 ? '' : 's'}',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_right_rounded,
+                      size: 14, color: AppColors.textTertiary),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

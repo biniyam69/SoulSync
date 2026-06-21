@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
+import '../models/persona.dart';
 import '../providers/app_providers.dart';
+import '../providers/persona_provider.dart';
 import '../services/storage_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -211,6 +213,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onChanged: (v) => setState(() => _nightModeEnabled = v),
             ),
           ),
+          const SizedBox(height: 24),
+          _SectionLabel('Persona'),
+          const SizedBox(height: 8),
+          _PersonaSelector(),
           const SizedBox(height: 32),
           _SectionLabel('Data'),
           const SizedBox(height: 8),
@@ -421,6 +427,77 @@ class _DangerTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PersonaSelector extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = ref.watch(personaProvider);
+
+    return Column(
+      children: Persona.values.map((p) {
+        final selected = p == current;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: GestureDetector(
+            onTap: () => ref.read(personaProvider.notifier).setPersona(p),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.amber.withOpacity(0.08)
+                    : AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.fromBorderSide(
+                  BorderSide(
+                    color: selected
+                        ? AppColors.amber.withOpacity(0.5)
+                        : AppColors.border,
+                    width: selected ? 1 : 0.5,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(p.icon,
+                      style: const TextStyle(fontSize: 20)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p.label,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: selected
+                                ? AppColors.amber
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          p.description,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (selected)
+                    const Icon(Icons.check_circle_rounded,
+                        color: AppColors.amber, size: 18),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

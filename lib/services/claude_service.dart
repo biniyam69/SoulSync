@@ -4,6 +4,11 @@ import '../core/constants.dart';
 import '../models/transcript_entry.dart';
 import '../models/daily_session.dart';
 import '../models/memory_entry.dart';
+import '../models/intent.dart';
+import '../models/person.dart';
+import '../models/persona.dart';
+import '../models/emotion.dart';
+import '../models/introspection_entry.dart';
 
 class ClaudeService {
   String _apiKey;
@@ -259,6 +264,248 @@ Keep answers to 2-4 sentences unless detail is clearly needed.
         },
       ],
       maxTokens: 512,
+    );
+  }
+
+  // ─── Intent extraction ────────────────────────────────────────────────
+
+  Future<String?> extractIntent(String utteranceText, String utteranceId) async {
+    if (!Intent.looksLikeIntent(utteranceText)) return null;
+
+    try {
+      final result = await _send(
+        systemPrompt: '''
+Extract the core commitment or task from this statement. Return ONLY the clean task text — no quotes, no explanation.
+If there is no clear actionable commitment, return exactly: NONE
+Examples:
+Input: "I should really call my mom this week" → Output: Call mom
+Input: "I need to finish the report by Friday" → Output: Finish the report by Friday
+Input: "I'm just saying it would be nice" → Output: NONE
+''',
+        messages: [{'role': 'user', 'content': utteranceText}],
+        maxTokens: 40,
+      );
+      final clean = result.trim();
+      if (clean == 'NONE' || clean.isEmpty) return null;
+      return clean;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ─── Emotion detection ────────────────────────────────────────────────
+
+  Future<EmotionalState> detectEmotion(String text) async {
+    // Fast local detection first
+    final local = EmotionalState.detectLocal(text);
+    if (local != EmotionalState.neutral) return local;
+
+    try {
+      final result = await _send(
+        systemPrompt: '''
+Classify the emotional state in this text with ONE word from this list:
+calm, happy, excited, stressed, anxious, sad, frustrated, focused, tired, neutral
+Return ONLY the single word.
+''',
+        messages: [{'role': 'user', 'content': text}],
+        maxTokens: 10,
+      );
+      return EmotionalState.fromString(result.trim());
+    } catch (_) {
+      return EmotionalState.neutral;
+    }
+  }
+
+  // ─── Morning briefing ─────────────────────────────────────────────────
+
+  Future<String> generateMorningBriefing({
+    required String userName,
+    required MemoryEntry? yesterday,
+    required List<Intent> openIntents,
+    required Persona persona,
+  }) async {
+    final name = userName.isNotEmpty ? userName : 'friend';
+    final yesterdaySummary = yesterday?.summary ?? 'No entry for yesterday.';
+    final intentsText = openIntents.isEmpty
+        ? 'No open commitments.'
+        : openIntents
+            .take(3)
+            .map((i) => '• ${i.text} (${i.ageDays}d old)')
+            .join('\n');
+
+    return _send(
+      systemPrompt: '''
+${persona.systemPromptModifier}
+You are giving a morning briefing to $name. Be warm and energizing.
+Keep it to 3-4 sentences total, followed by ONE question to carry into the day.
+Speak naturally, not like a report.
+''',
+      messages: [
+        {
+          'role': 'user',
+          'content':
+              'Yesterday: $yesterdaySummary\n\nOpen commitments:\n$intentsText\n\nGive me my morning briefing.',
+        },
+      ],
+      maxTokens: 200,
+    );
+  }
+
+  // ─── Introspection prompt ─────────────────────────────────────────────
+
+  Future<String> generateIntrospectionQuestion({
+    required String userName,
+    required List<TranscriptEntry> recentEntries,
+    required List<MemoryEntry> recentMemories,
+    required Persona persona,
+    required EmotionalState currentMood,
+  }) async {
+    final recentText = recentEntries.isEmpty
+        ? 'No recent conversation.'
+        : recentEntries
+            .take(5)
+            .map((e) => '${e.speakerLabel}: ${e.text}')
+            .join('\n');
+
+    final memoryThemes = recentMemories.isEmpty
+        ? ''
+        : recentMemories
+            .take(3)
+            .map((m) => m.summary)
+            .join(' | ');
+
+    return _send(
+      systemPrompt: '''
+${persona.systemPromptModifier}
+Generate ONE deep, personal introspective question for ${userName.isNotEmpty ? userName : 'the user'}.
+The question should feel relevant to their current state and recent life.
+Do NOT make it generic. Make it specific to what they seem to be going through.
+Current mood detected: ${currentMood.label}.
+Return ONLY the question. No preamble.
+''',
+      messages: [
+        {
+          'role': 'user',
+          'content':
+              'Recent activity:\n$recentText\n\nRecent memory themes: $memoryThemes\n\nGive me a question to reflect on.',
+        },
+      ],
+      maxTokens: 80,
+    );
+  }
+
+  // ─── People extraction ────────────────────────────────────────────────
+
+  Future<List<Map<String, String>>> extractPeopleFromSession({
+    required DailySession session,
+    required String userName,
+  }) async {
+    if (session.entries.isEmpty) return [];
+
+    final transcript = session.entries
+        .where((e) => !e.isAssistant)
+        .map((e) => '${e.speakerLabel}: ${e.text}')
+        .join('\n');
+
+    try {
+      final result = await _send(
+        systemPrompt: '''
+Extract all real people mentioned by name in this transcript.
+For each person, determine: their name, relationship type (friend/family/work/romantic/acquaintance/unknown), and a short 1-sentence context.
+Return as JSON inside <json></json> tags.
+Format: [{"name": "Alex", "relationship": "friend", "context": "mentioned working together on a project"}]
+Do NOT include "$userName" or generic references. Only real named people.
+If nobody is mentioned, return: <json>[]</json>
+''',
+        messages: [{'role': 'user', 'content': transcript}],
+        maxTokens: 400,
+      );
+
+      final match = RegExp(r'<json>(.*?)</json>', dotAll: true).firstMatch(result);
+      final jsonStr = match?.group(1)?.trim() ?? '[]';
+      final list = jsonDecode(jsonStr) as List<dynamic>;
+      return list.map((e) => Map<String, String>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ─── Weekly digest ────────────────────────────────────────────────────
+
+  Future<String> generateWeeklyDigest({
+    required String userName,
+    required List<MemoryEntry> weekMemories,
+    required List<Intent> completedIntents,
+    required List<Intent> openIntents,
+    required Persona persona,
+  }) async {
+    final memorySummaries = weekMemories
+        .map((m) => '${m.date}: ${m.summary}')
+        .join('\n\n');
+
+    final completedText = completedIntents.isEmpty
+        ? 'None'
+        : completedIntents.map((i) => '✓ ${i.text}').join('\n');
+    final openText = openIntents.isEmpty
+        ? 'None'
+        : openIntents.map((i) => '• ${i.text}').join('\n');
+
+    return _send(
+      systemPrompt: '''
+${persona.systemPromptModifier}
+Generate a weekly digest for ${userName.isNotEmpty ? userName : 'the user'}.
+Make it feel like a personal podcast episode — warm, reflective, narrative.
+Cover: the week's arc/theme, key moments, who showed up in their life, how they seemed to feel.
+End with one insight or encouragement.
+Keep it under 300 words. Speak in second person.
+''',
+      messages: [
+        {
+          'role': 'user',
+          'content':
+              'Week memories:\n$memorySummaries\n\nCompleted this week:\n$completedText\n\nStill open:\n$openText\n\nGenerate my weekly digest.',
+        },
+      ],
+      maxTokens: 600,
+    );
+  }
+
+  // ─── Thought journal summary ──────────────────────────────────────────
+
+  Future<String> summarizeThoughtJournal(List<TranscriptEntry> thoughts) async {
+    if (thoughts.isEmpty) return 'Nothing was captured.';
+
+    final text = thoughts.map((t) => t.text).join('\n');
+
+    return _send(
+      systemPrompt: '''
+The user just finished a private thought journal session — they spoke freely without interruption.
+Reflect back what was on their mind. Be observational and gentle.
+Identify: main themes, any tensions or excitements, what seemed most present.
+Keep it to 2-3 sentences. Speak in second person ("You were thinking about...").
+''',
+      messages: [{'role': 'user', 'content': text}],
+      maxTokens: 150,
+    );
+  }
+
+  // ─── Insights ─────────────────────────────────────────────────────────
+
+  Future<String> generateWeeklyInsight({
+    required List<MemoryEntry> memories,
+    required List<TranscriptEntry> recentEntries,
+  }) async {
+    final memText = memories.take(7).map((m) => m.toReadableText()).join('\n\n---\n\n');
+
+    return _send(
+      systemPrompt: '''
+You are analyzing a week of someone's life to surface a non-obvious pattern or insight.
+Look for: recurring themes, emotional patterns, relationship dynamics, contradictions between stated goals and actual behavior.
+Return ONE paragraph — a single, specific, genuinely useful observation.
+Not generic advice. A real pattern you see.
+''',
+      messages: [{'role': 'user', 'content': memText}],
+      maxTokens: 200,
     );
   }
 
