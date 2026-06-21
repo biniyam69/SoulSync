@@ -1,50 +1,28 @@
-import 'package:dating_app/Account/account_screen.dart';
-import 'package:dating_app/Authentication/forgot_password/change_forgotten_password_screen.dart';
-import 'package:dating_app/Authentication/forgot_password/forgot_password_screen.dart';
-import 'package:dating_app/Authentication/forgot_password/verify_code_screen.dart';
-import 'package:dating_app/Authentication/login/login_screen.dart';
-import 'package:dating_app/Authentication/register/register_screen.dart';
-import 'package:dating_app/Main/menu_screen.dart';
-import 'package:dating_app/Onboarding/landing_screen.dart';
-import 'package:dating_app/Onboarding/setup_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'app.dart';
+import 'providers/app_providers.dart';
 
-import 'Common/theme_provider.dart';
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-void main() {
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Color(0xFF0A0A0B),
+    systemNavigationBarIconBrightness: Brightness.light,
+  ));
+
+  final prefs = await SharedPreferences.getInstance();
+
   runApp(
-    const ProviderScope(
-      child: MyApp(),
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const SoulSyncApp(),
     ),
   );
-}
-
-class MyApp extends ConsumerWidget {
-  const MyApp({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return MaterialApp(
-      title: 'Dating App',
-      themeMode: ref.watch(themeModeProvider),
-      theme: ref.watch(lightThemeProvider),
-      darkTheme: ref.watch(darkThemeProvider),
-      debugShowCheckedModeBanner: false,
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const LandingScreen(),
-        LoginScreen.id: (context) => const LoginScreen(),
-        ForgotPasswordScreen.id: (context) => const ForgotPasswordScreen(),
-        VerifyCodeScreen.id: (context) => const VerifyCodeScreen(),
-        ChangeForgottenPasswordScreen.id: (context) =>
-            const ChangeForgottenPasswordScreen(),
-        RegisterScreen.id: (context) => const RegisterScreen(),
-        SetupScreen.id: (context) => const SetupScreen(),
-        AccountScreen.id: (context) => const AccountScreen(),
-        MenuScreen.id: (context) => const MenuScreen(),
-        // SwipeScreen.id: (context) => const SwipeScreen(),
-      },
-    );
-  }
 }
