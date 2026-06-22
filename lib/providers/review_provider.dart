@@ -8,6 +8,7 @@ import '../services/storage_service.dart';
 import '../services/tts_service.dart';
 import '../services/speaker_service.dart';
 import 'app_providers.dart';
+import 'people_provider.dart';
 
 enum ReviewPhase { loading, narrative, speakerCorrection, generating, complete }
 
@@ -187,6 +188,12 @@ class ReviewNotifier extends AsyncNotifier<ReviewState> {
       );
 
       await _storage.saveMemory(memory);
+
+      // Extract people mentioned in the session (background)
+      ref
+          .read(peopleProvider.notifier)
+          .extractFromSession(current.session!)
+          .ignore();
 
       // Mark review complete
       final updatedSession =

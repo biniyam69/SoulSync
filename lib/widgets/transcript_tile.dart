@@ -67,6 +67,13 @@ class TranscriptTile extends StatelessWidget {
                           color: AppColors.textTertiary,
                         ),
                       ),
+                      if (entry.emotion != null) ...[
+                        const SizedBox(width: 5),
+                        Text(
+                          entry.emotion!.emoji,
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ],
                       if (isUser) const SizedBox(width: 6),
                       if (isUser)
                         Text(

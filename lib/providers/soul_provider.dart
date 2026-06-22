@@ -9,12 +9,17 @@ import '../models/transcript_entry.dart';
 import '../models/daily_session.dart';
 import '../models/memory_entry.dart';
 import '../models/speaker.dart';
+import '../models/emotion.dart';
+import '../models/intent.dart';
 import '../services/claude_service.dart';
 import '../services/speech_service.dart';
 import '../services/tts_service.dart';
 import '../services/speaker_service.dart';
 import '../services/storage_service.dart';
 import 'app_providers.dart';
+import 'persona_provider.dart';
+import 'intent_provider.dart';
+import 'introspection_provider.dart';
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -81,6 +86,7 @@ class SoulNotifier extends Notifier<SoulState> {
   static const _uuid = Uuid();
   Timer? _checkinTimer;
   StreamSubscription<bool>? _ttsSub;
+  String? _pendingIntrospectionEntryId;
 
   late SpeechService _speech;
   late TtsService _tts;
@@ -203,10 +209,44 @@ class SoulNotifier extends Notifier<SoulState> {
     );
     await _storage.saveSession(updatedSession);
 
-    // If user is speaking, respond conversationally
     if (speakerId == SpeakerIds.user) {
+      // Handle pending introspection answer
+      if (_pendingIntrospectionEntryId != null) {
+        final entryId = _pendingIntrospectionEntryId!;
+        _pendingIntrospectionEntryId = null;
+        ref
+            .read(introspectionProvider.notifier)
+            .recordAnswer(entryId, text)
+            .ignore();
+      }
+
+      // Background: detect emotion and update entry
+      _detectAndUpdateEmotion(entry);
+
+      // Background: extract intent if utterance looks like a commitment
+      if (Intent.looksLikeIntent(text)) {
+        ref
+            .read(intentProvider.notifier)
+            .processUtterance(text, entry.id)
+            .ignore();
+      }
+
       await _respondToUser(text, updatedEntries);
     }
+  }
+
+  void _detectAndUpdateEmotion(TranscriptEntry entry) {
+    _claude.detectEmotion(entry.text).then((emotion) {
+      if (emotion == EmotionalState.neutral) return;
+      final entries = state.session.entries;
+      final idx = entries.indexWhere((e) => e.id == entry.id);
+      if (idx == -1) return;
+      final updated = List<TranscriptEntry>.from(entries);
+      updated[idx] = entries[idx].copyWith(emotion: emotion);
+      final session = state.session.copyWith(entries: updated);
+      state = state.copyWith(session: session);
+      _storage.saveSession(session).ignore();
+    }).ignore();
   }
 
   Future<void> _respondToUser(
@@ -260,13 +300,18 @@ class SoulNotifier extends Notifier<SoulState> {
 
   void _armCheckinTimer() {
     _checkinTimer?.cancel();
+    final persona = ref.read(personaProvider);
+    if (!persona.allowsProactiveCheckins) return;
     if (!(_prefs.getBool(AppConstants.prefCheckInEnabled) ?? true)) return;
 
     final minMin = _prefs.getInt(AppConstants.prefCheckInMinInterval) ??
         AppConstants.minCheckInMinutes;
     final maxMin = _prefs.getInt(AppConstants.prefCheckInMaxInterval) ??
         AppConstants.maxCheckInMinutes;
-    final intervalMin = minMin + Random().nextInt(maxMin - minMin + 1);
+    final baseInterval = minMin + Random().nextInt(maxMin - minMin + 1);
+    final mult = persona.checkinFrequencyMultiplier;
+    final intervalMin =
+        mult <= 0 ? maxMin : (baseInterval / mult).round().clamp(minMin, maxMin * 3);
 
     final next = DateTime.now().add(Duration(minutes: intervalMin));
     state = state.copyWith(nextCheckinAt: next);
@@ -294,12 +339,43 @@ class SoulNotifier extends Notifier<SoulState> {
       await _speech.stopListening();
       final userName = _prefs.getString(AppConstants.prefUserName) ?? '';
       final recent = state.session.entries.reversed.take(8).toList().reversed.toList();
+      final persona = ref.read(personaProvider);
 
-      final phrase = await _claude.generateCheckin(
-        userName: userName,
-        recentEntries: recent,
-        now: DateTime.now(),
-      );
+      // Decide: regular check-in or introspection question?
+      final doIntrospection =
+          Random().nextDouble() < persona.introspectionRatio;
+
+      String phrase;
+      if (doIntrospection) {
+        final currentMood = recent.isNotEmpty && recent.last.emotion != null
+            ? recent.last.emotion!
+            : EmotionalState.neutral;
+
+        final introspectionResult = await ref
+            .read(introspectionProvider.notifier)
+            .generateQuestion(
+              recentEntries: recent,
+              recentMemories: [],
+              currentMood: currentMood,
+            );
+
+        if (introspectionResult != null) {
+          _pendingIntrospectionEntryId = introspectionResult.id;
+          phrase = introspectionResult.question;
+        } else {
+          phrase = await _claude.generateCheckin(
+            userName: userName,
+            recentEntries: recent,
+            now: DateTime.now(),
+          );
+        }
+      } else {
+        phrase = await _claude.generateCheckin(
+          userName: userName,
+          recentEntries: recent,
+          now: DateTime.now(),
+        );
+      }
 
       await _addAssistantEntry(phrase);
       await _tts.speak(phrase);

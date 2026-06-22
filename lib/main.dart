@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'providers/app_providers.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +15,8 @@ void main() async {
     systemNavigationBarColor: Color(0xFF0A0A0B),
     systemNavigationBarIconBrightness: Brightness.light,
   ));
+
+  await NotificationService.init();
 
   final prefs = await SharedPreferences.getInstance();
 
