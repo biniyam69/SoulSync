@@ -5,6 +5,7 @@ import '../core/constants.dart';
 import '../models/persona.dart';
 import '../providers/app_providers.dart';
 import '../providers/persona_provider.dart';
+import '../providers/gmail_provider.dart';
 import '../services/storage_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -217,6 +218,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _SectionLabel('Persona'),
           const SizedBox(height: 8),
           _PersonaSelector(),
+          const SizedBox(height: 24),
+          _SectionLabel('Connected Accounts'),
+          const SizedBox(height: 8),
+          _ConnectedAccountsTile(),
           const SizedBox(height: 32),
           _SectionLabel('Data'),
           const SizedBox(height: 8),
@@ -427,6 +432,92 @@ class _DangerTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ConnectedAccountsTile extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gmailAsync = ref.watch(gmailProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(12),
+        border: const Border.fromBorderSide(
+            BorderSide(color: AppColors.border, width: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Center(
+              child: Text('G', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF4285F4))),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Google',
+                  style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500),
+                ),
+                gmailAsync.when(
+                  loading: () => Text('Connecting…',
+                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.textTertiary)),
+                  error: (_, __) => Text('Not connected',
+                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                  data: (account) => Text(
+                    account != null ? account.email : 'Calendar + Gmail for morning briefing',
+                    style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: account != null ? AppColors.textSecondary : AppColors.textTertiary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          gmailAsync.when(
+            loading: () => const SizedBox(
+                width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.amber)),
+            error: (_, __) => _connectButton(ref),
+            data: (account) => account != null
+                ? TextButton(
+                    onPressed: () => ref.read(gmailProvider.notifier).signOut(),
+                    child: Text('Disconnect',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textTertiary)),
+                  )
+                : _connectButton(ref),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _connectButton(WidgetRef ref) {
+    return TextButton(
+      onPressed: () => ref.read(gmailProvider.notifier).signIn(),
+      style: TextButton.styleFrom(
+        backgroundColor: AppColors.amber.withOpacity(0.1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      ),
+      child: Text('Connect',
+          style: GoogleFonts.inter(
+              fontSize: 12, color: AppColors.amber, fontWeight: FontWeight.w600)),
     );
   }
 }

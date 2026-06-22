@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>dating_app</string>
+	<string>SoulSync</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -49,6 +49,24 @@
 	<string>SoulSync listens continuously through your earphones to document your day and check in with you.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>SoulSync uses speech recognition to transcribe your conversations and understand what you say.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>SoulSync reads your calendar to include today's schedule in your morning briefing.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>SoulSync reads your calendar to include today's schedule in your morning briefing.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>SoulSync can read reminders to surface them in your morning briefing.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- TODO: Replace with your REVERSED_CLIENT_ID from GoogleService-Info.plist -->
+				<string>com.googleusercontent.apps.YOUR_CLIENT_ID</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
