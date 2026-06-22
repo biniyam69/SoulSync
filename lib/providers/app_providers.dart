@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../services/claude_service.dart';
@@ -13,12 +14,20 @@ final sharedPreferencesProvider = Provider<SharedPreferences>(
   (_) => throw UnimplementedError('Override in main'),
 );
 
-// ─── Settings derived from SharedPreferences ──────────────────────────────
+final secureStorageProvider = Provider<FlutterSecureStorage>(
+  (_) => const FlutterSecureStorage(),
+);
 
-final apiKeyProvider = Provider<String>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs.getString(AppConstants.prefApiKey) ?? '';
-});
+// ─── Secure API key state (initialized from secure storage in main.dart) ──
+
+// These start empty; main.dart overrides them with values loaded from
+// FlutterSecureStorage (with one-time migration from SharedPreferences).
+final apiKeyProvider = StateProvider<String>((_) => '');
+final deepseekApiKeyProvider = StateProvider<String>((_) => '');
+final elevenlabsApiKeyProvider = StateProvider<String>((_) => '');
+final elevenlabsVoiceIdProvider = StateProvider<String>((_) => '');
+
+// ─── Non-sensitive settings from SharedPreferences ─────────────────────────
 
 final userNameProvider = Provider<String>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
@@ -35,21 +44,16 @@ final onboardingDoneProvider = Provider<bool>((ref) {
   return prefs.getBool(AppConstants.prefOnboardingDone) ?? false;
 });
 
-// ─── Services ──────────────────────────────────────────────────────────────
-
-final storageServiceProvider = Provider<StorageService>((ref) {
-  return StorageService();
-});
-
-final deepseekApiKeyProvider = Provider<String>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs.getString(AppConstants.prefDeepSeekApiKey) ?? '';
-});
-
 final llmProviderProvider = Provider<LlmProvider>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   final str = prefs.getString(AppConstants.prefLlmProvider) ?? 'claude';
   return str == 'deepseek' ? LlmProvider.deepseek : LlmProvider.claude;
+});
+
+// ─── Services ──────────────────────────────────────────────────────────────
+
+final storageServiceProvider = Provider<StorageService>((ref) {
+  return StorageService();
 });
 
 final claudeServiceProvider = Provider<ClaudeService>((ref) {
@@ -63,16 +67,6 @@ final speechServiceProvider = Provider<SpeechService>((ref) {
   final service = SpeechService();
   ref.onDispose(service.dispose);
   return service;
-});
-
-final elevenlabsApiKeyProvider = Provider<String>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs.getString(AppConstants.prefElevenLabsApiKey) ?? '';
-});
-
-final elevenlabsVoiceIdProvider = Provider<String>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs.getString(AppConstants.prefElevenLabsVoiceId) ?? '';
 });
 
 final ttsServiceProvider = Provider<TtsService>((ref) {

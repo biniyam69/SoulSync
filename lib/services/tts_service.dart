@@ -69,7 +69,16 @@ class TtsService {
       _speakingController.add(false);
       _speakCompleter?.complete();
       _speakCompleter = null;
+      _deleteTempMp3();
     });
+  }
+
+  Future<void> _deleteTempMp3() async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/el_tts.mp3');
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
   }
 
   Future<void> initialize() async {
@@ -156,6 +165,7 @@ class TtsService {
     _speakingController.add(false);
     _speakCompleter?.complete();
     _speakCompleter = null;
+    await _deleteTempMp3();
   }
 
   void dispose() {

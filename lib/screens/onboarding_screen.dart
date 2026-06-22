@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../providers/app_providers.dart';
 import '../services/speaker_service.dart';
@@ -66,10 +65,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _keyError = null;
     });
     final claude = ref.read(claudeServiceProvider);
-    final valid = await claude.validateApiKey(_apiKeyCtrl.text.trim());
+    final key = _apiKeyCtrl.text.trim();
+    final valid = await claude.validateApiKey(key);
     if (valid) {
-      final prefs = ref.read(sharedPreferencesProvider);
-      await prefs.setString(AppConstants.prefApiKey, _apiKeyCtrl.text.trim());
+      final secure = ref.read(secureStorageProvider);
+      await secure.write(key: AppConstants.prefApiKey, value: key);
+      ref.read(apiKeyProvider.notifier).state = key;
     }
     setState(() {
       _validatingKey = false;

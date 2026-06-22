@@ -61,8 +61,7 @@ class ClaudeService {
         .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
-      final body = jsonDecode(response.body);
-      throw Exception(body['error']?['message'] ?? 'Claude API error ${response.statusCode}');
+      throw Exception(_parseApiError(response.body, 'Claude', response.statusCode));
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -98,12 +97,22 @@ class ClaudeService {
         .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
-      final body = jsonDecode(response.body);
-      throw Exception(body['error']?['message'] ?? 'DeepSeek API error ${response.statusCode}');
+      throw Exception(_parseApiError(response.body, 'DeepSeek', response.statusCode));
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return body['choices'][0]['message']['content'] as String;
+  }
+
+  // Returns a safe, non-leaking error message from an API error response.
+  String _parseApiError(String responseBody, String provider, int statusCode) {
+    try {
+      final body = jsonDecode(responseBody) as Map<String, dynamic>;
+      final msg = body['error']?['message'] as String?;
+      if (msg != null && msg.isNotEmpty) return msg;
+    } catch (_) {}
+    // Fall back to a generic message that doesn't expose internals
+    return '$provider service unavailable. Please try again.';
   }
 
   // ─── Proactive check-in ────────────────────────────────────────────────

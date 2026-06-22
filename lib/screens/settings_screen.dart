@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
-import '../core/constants.dart';
 import '../models/persona.dart';
 import '../providers/app_providers.dart';
 import '../providers/persona_provider.dart';
@@ -39,18 +38,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _nameCtrl = TextEditingController(
       text: prefs.getString(AppConstants.prefUserName) ?? '',
     );
-    _apiKeyCtrl = TextEditingController(
-      text: prefs.getString(AppConstants.prefApiKey) ?? '',
-    );
-    _deepseekKeyCtrl = TextEditingController(
-      text: prefs.getString(AppConstants.prefDeepSeekApiKey) ?? '',
-    );
-    _elevenlabsKeyCtrl = TextEditingController(
-      text: prefs.getString(AppConstants.prefElevenLabsApiKey) ?? '',
-    );
-    _elevenlabsVoiceIdCtrl = TextEditingController(
-      text: prefs.getString(AppConstants.prefElevenLabsVoiceId) ?? '',
-    );
+    // API keys are loaded from secure storage into StateProviders at startup
+    _apiKeyCtrl = TextEditingController(text: ref.read(apiKeyProvider));
+    _deepseekKeyCtrl =
+        TextEditingController(text: ref.read(deepseekApiKeyProvider));
+    _elevenlabsKeyCtrl =
+        TextEditingController(text: ref.read(elevenlabsApiKeyProvider));
+    _elevenlabsVoiceIdCtrl =
+        TextEditingController(text: ref.read(elevenlabsVoiceIdProvider));
     final providerStr = prefs.getString(AppConstants.prefLlmProvider) ?? 'claude';
     _llmProvider = providerStr == 'deepseek' ? LlmProvider.deepseek : LlmProvider.claude;
     _minInterval = (prefs.getInt(AppConstants.prefCheckInMinInterval) ??
@@ -76,11 +71,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _save() async {
     final prefs = ref.read(sharedPreferencesProvider);
+    final secure = ref.read(secureStorageProvider);
+
+    // API keys → encrypted secure storage
+    final claudeKey = _apiKeyCtrl.text.trim();
+    final deepseekKey = _deepseekKeyCtrl.text.trim();
+    final elKey = _elevenlabsKeyCtrl.text.trim();
+    final elVoiceId = _elevenlabsVoiceIdCtrl.text.trim();
+    await Future.wait([
+      secure.write(key: AppConstants.prefApiKey, value: claudeKey),
+      secure.write(key: AppConstants.prefDeepSeekApiKey, value: deepseekKey),
+      secure.write(key: AppConstants.prefElevenLabsApiKey, value: elKey),
+      secure.write(key: AppConstants.prefElevenLabsVoiceId, value: elVoiceId),
+    ]);
+    // Update in-memory providers so services rebuild immediately
+    ref.read(apiKeyProvider.notifier).state = claudeKey;
+    ref.read(deepseekApiKeyProvider.notifier).state = deepseekKey;
+    ref.read(elevenlabsApiKeyProvider.notifier).state = elKey;
+    ref.read(elevenlabsVoiceIdProvider.notifier).state = elVoiceId;
+
+    // Non-sensitive settings stay in SharedPreferences
     await prefs.setString(AppConstants.prefUserName, _nameCtrl.text.trim());
-    await prefs.setString(AppConstants.prefApiKey, _apiKeyCtrl.text.trim());
-    await prefs.setString(AppConstants.prefDeepSeekApiKey, _deepseekKeyCtrl.text.trim());
-    await prefs.setString(AppConstants.prefElevenLabsApiKey, _elevenlabsKeyCtrl.text.trim());
-    await prefs.setString(AppConstants.prefElevenLabsVoiceId, _elevenlabsVoiceIdCtrl.text.trim());
     await prefs.setString(AppConstants.prefLlmProvider,
         _llmProvider == LlmProvider.deepseek ? 'deepseek' : 'claude');
     await prefs.setInt(
