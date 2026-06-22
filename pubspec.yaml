@@ -29,6 +29,11 @@ dependencies:
   # Networking (Claude API)
   http: ^1.2.1
 
+  # Google integrations (Calendar + Gmail)
+  google_sign_in: ^6.2.1
+  googleapis: ^13.2.0
+  device_calendar: ^4.3.1
+
   # Permissions
   permission_handler: ^11.3.1
 

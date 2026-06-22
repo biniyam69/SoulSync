@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 import '../models/morning_briefing.dart';
 import '../services/storage_service.dart';
 import '../services/claude_service.dart';
+import '../services/calendar_service.dart';
+import '../services/gmail_service.dart';
 import 'app_providers.dart';
 import 'persona_provider.dart';
 
@@ -41,11 +43,19 @@ class MorningBriefingNotifier extends AsyncNotifier<MorningBriefing?> {
       final userName = ref.read(userNameProvider);
       final persona = ref.read(personaProvider);
 
+      // Fetch calendar and emails in parallel — silently fail if unavailable
+      final calendarFuture = CalendarService.getTodayEvents();
+      final emailFuture = GmailService.getRecentEmails();
+      final calendarEvents = await calendarFuture;
+      final emailBriefs = await emailFuture;
+
       final content = await _claude.generateMorningBriefing(
         userName: userName,
         yesterday: memory,
         openIntents: openIntents,
         persona: persona,
+        calendarEvents: calendarEvents,
+        emailBriefs: emailBriefs,
       );
 
       final briefing = MorningBriefing(
