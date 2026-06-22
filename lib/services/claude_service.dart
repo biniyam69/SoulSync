@@ -14,8 +14,15 @@ import '../models/email_brief.dart';
 
 class ClaudeService {
   String _apiKey;
+  final LlmProvider _provider;
+  final String _deepseekApiKey;
 
-  ClaudeService(this._apiKey);
+  ClaudeService(
+    this._apiKey, {
+    LlmProvider provider = LlmProvider.claude,
+    String deepseekApiKey = '',
+  })  : _provider = provider,
+        _deepseekApiKey = deepseekApiKey;
 
   void updateApiKey(String key) => _apiKey = key;
 
@@ -24,7 +31,17 @@ class ClaudeService {
     required List<Map<String, String>> messages,
     int maxTokens = 256,
   }) async {
-    if (_apiKey.isEmpty) throw Exception('API key not set');
+    return _provider == LlmProvider.deepseek
+        ? _sendDeepSeek(systemPrompt: systemPrompt, messages: messages, maxTokens: maxTokens)
+        : _sendClaude(systemPrompt: systemPrompt, messages: messages, maxTokens: maxTokens);
+  }
+
+  Future<String> _sendClaude({
+    required String systemPrompt,
+    required List<Map<String, String>> messages,
+    required int maxTokens,
+  }) async {
+    if (_apiKey.isEmpty) throw Exception('Claude API key not set');
 
     final response = await http
         .post(
@@ -50,6 +67,43 @@ class ClaudeService {
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return (body['content'] as List).first['text'] as String;
+  }
+
+  Future<String> _sendDeepSeek({
+    required String systemPrompt,
+    required List<Map<String, String>> messages,
+    required int maxTokens,
+  }) async {
+    if (_deepseekApiKey.isEmpty) throw Exception('DeepSeek API key not set');
+
+    // OpenAI-compatible format: system as first message
+    final allMessages = [
+      {'role': 'system', 'content': systemPrompt},
+      ...messages,
+    ];
+
+    final response = await http
+        .post(
+          Uri.parse('https://api.deepseek.com/v1/chat/completions'),
+          headers: {
+            'Authorization': 'Bearer $_deepseekApiKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'model': 'deepseek-chat',
+            'max_tokens': maxTokens,
+            'messages': allMessages,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['error']?['message'] ?? 'DeepSeek API error ${response.statusCode}');
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['choices'][0]['message']['content'] as String;
   }
 
   // ─── Proactive check-in ────────────────────────────────────────────────

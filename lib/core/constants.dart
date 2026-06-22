@@ -93,4 +93,14 @@ class AppConstants {
   static const prefReviewHour = 'review_hour';
   static const prefNightModeEnabled = 'night_mode_enabled';
   static const prefUserSpeakerId = 'user_speaker_id';
+
+  // ElevenLabs
+  static const prefElevenLabsApiKey = 'elevenlabs_api_key';
+  static const prefElevenLabsVoiceId = 'elevenlabs_voice_id';
+
+  // LLM provider
+  static const prefLlmProvider = 'llm_provider';
+  static const prefDeepSeekApiKey = 'deepseek_api_key';
 }
+
+enum LlmProvider { claude, deepseek }

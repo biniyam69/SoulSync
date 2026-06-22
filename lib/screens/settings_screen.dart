@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
+import '../core/constants.dart';
 import '../models/persona.dart';
 import '../providers/app_providers.dart';
 import '../providers/persona_provider.dart';
 import '../providers/gmail_provider.dart';
 import '../services/storage_service.dart';
+import '../services/tts_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -18,7 +20,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _nameCtrl;
   late TextEditingController _apiKeyCtrl;
+  late TextEditingController _deepseekKeyCtrl;
+  late TextEditingController _elevenlabsKeyCtrl;
+  late TextEditingController _elevenlabsVoiceIdCtrl;
   bool _showApiKey = false;
+  bool _showDeepSeekKey = false;
+  bool _showElevenLabsKey = false;
+  late LlmProvider _llmProvider;
   late double _minInterval;
   late double _maxInterval;
   late bool _checkInEnabled;
@@ -34,6 +42,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _apiKeyCtrl = TextEditingController(
       text: prefs.getString(AppConstants.prefApiKey) ?? '',
     );
+    _deepseekKeyCtrl = TextEditingController(
+      text: prefs.getString(AppConstants.prefDeepSeekApiKey) ?? '',
+    );
+    _elevenlabsKeyCtrl = TextEditingController(
+      text: prefs.getString(AppConstants.prefElevenLabsApiKey) ?? '',
+    );
+    _elevenlabsVoiceIdCtrl = TextEditingController(
+      text: prefs.getString(AppConstants.prefElevenLabsVoiceId) ?? '',
+    );
+    final providerStr = prefs.getString(AppConstants.prefLlmProvider) ?? 'claude';
+    _llmProvider = providerStr == 'deepseek' ? LlmProvider.deepseek : LlmProvider.claude;
     _minInterval = (prefs.getInt(AppConstants.prefCheckInMinInterval) ??
             AppConstants.minCheckInMinutes)
         .toDouble();
@@ -49,6 +68,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _apiKeyCtrl.dispose();
+    _deepseekKeyCtrl.dispose();
+    _elevenlabsKeyCtrl.dispose();
+    _elevenlabsVoiceIdCtrl.dispose();
     super.dispose();
   }
 
@@ -56,6 +78,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setString(AppConstants.prefUserName, _nameCtrl.text.trim());
     await prefs.setString(AppConstants.prefApiKey, _apiKeyCtrl.text.trim());
+    await prefs.setString(AppConstants.prefDeepSeekApiKey, _deepseekKeyCtrl.text.trim());
+    await prefs.setString(AppConstants.prefElevenLabsApiKey, _elevenlabsKeyCtrl.text.trim());
+    await prefs.setString(AppConstants.prefElevenLabsVoiceId, _elevenlabsVoiceIdCtrl.text.trim());
+    await prefs.setString(AppConstants.prefLlmProvider,
+        _llmProvider == LlmProvider.deepseek ? 'deepseek' : 'claude');
     await prefs.setInt(
         AppConstants.prefCheckInMinInterval, _minInterval.round());
     await prefs.setInt(
@@ -152,10 +179,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ctrl: _nameCtrl,
           ),
           const SizedBox(height: 24),
-          _SectionLabel('Claude AI'),
+          _SectionLabel('AI Model'),
           const SizedBox(height: 8),
+          _ModelSelector(
+            selected: _llmProvider,
+            onChanged: (v) => setState(() => _llmProvider = v),
+          ),
+          const SizedBox(height: 12),
           _SettingsTextField(
-            label: 'API Key',
+            label: 'Claude API Key',
             ctrl: _apiKeyCtrl,
             obscure: !_showApiKey,
             suffix: IconButton(
@@ -167,6 +199,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPressed: () => setState(() => _showApiKey = !_showApiKey),
             ),
           ),
+          if (_llmProvider == LlmProvider.deepseek) ...[
+            const SizedBox(height: 10),
+            _SettingsTextField(
+              label: 'DeepSeek API Key',
+              ctrl: _deepseekKeyCtrl,
+              obscure: !_showDeepSeekKey,
+              suffix: IconButton(
+                icon: Icon(
+                  _showDeepSeekKey ? Icons.visibility_off : Icons.visibility,
+                  color: AppColors.textTertiary,
+                  size: 18,
+                ),
+                onPressed: () => setState(() => _showDeepSeekKey = !_showDeepSeekKey),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          _SectionLabel('Voice'),
+          const SizedBox(height: 8),
+          _SettingsTextField(
+            label: 'ElevenLabs API Key',
+            ctrl: _elevenlabsKeyCtrl,
+            obscure: !_showElevenLabsKey,
+            suffix: IconButton(
+              icon: Icon(
+                _showElevenLabsKey ? Icons.visibility_off : Icons.visibility,
+                color: AppColors.textTertiary,
+                size: 18,
+              ),
+              onPressed: () => setState(() => _showElevenLabsKey = !_showElevenLabsKey),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _SettingsTextField(
+            label: 'Voice ID',
+            ctrl: _elevenlabsVoiceIdCtrl,
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Text(
+              'Find Voice IDs at elevenlabs.io/voice-lab. Leave blank to use device voice.',
+              style: GoogleFonts.inter(fontSize: 11, color: AppColors.textTertiary, height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _TestVoiceButton(),
           const SizedBox(height: 24),
           _SectionLabel('Check-ins'),
           const SizedBox(height: 8),
@@ -433,6 +512,131 @@ class _DangerTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ─── Model Selector ───────────────────────────────────────────────────────
+
+class _ModelSelector extends StatelessWidget {
+  final LlmProvider selected;
+  final ValueChanged<LlmProvider> onChanged;
+  const _ModelSelector({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: LlmProvider.values.map((p) {
+        final isSelected = p == selected;
+        final label = p == LlmProvider.claude ? 'Claude' : 'DeepSeek';
+        final sub = p == LlmProvider.claude ? 'Anthropic' : 'Cheaper · OpenAI-compat';
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: p == LlmProvider.claude ? 8 : 0),
+            child: GestureDetector(
+              onTap: () => onChanged(p),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppColors.amber.withOpacity(0.08)
+                      : AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.fromBorderSide(BorderSide(
+                    color: isSelected
+                        ? AppColors.amber.withOpacity(0.5)
+                        : AppColors.border,
+                    width: isSelected ? 1 : 0.5,
+                  )),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          label,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected ? AppColors.amber : AppColors.textPrimary,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const Spacer(),
+                          const Icon(Icons.check_circle_rounded,
+                              color: AppColors.amber, size: 14),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(sub,
+                        style: GoogleFonts.inter(
+                            fontSize: 11, color: AppColors.textTertiary)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ─── Test Voice Button ────────────────────────────────────────────────────
+
+class _TestVoiceButton extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_TestVoiceButton> createState() => _TestVoiceButtonState();
+}
+
+class _TestVoiceButtonState extends ConsumerState<_TestVoiceButton> {
+  bool _testing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _testing ? null : _test,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(12),
+          border: const Border.fromBorderSide(
+              BorderSide(color: AppColors.border, width: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _testing ? Icons.volume_up_rounded : Icons.play_arrow_rounded,
+              size: 16,
+              color: _testing ? AppColors.orbSpeaking : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _testing ? 'Speaking…' : 'Test voice',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: _testing ? AppColors.orbSpeaking : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _test() async {
+    setState(() => _testing = true);
+    try {
+      await ref
+          .read(ttsServiceProvider)
+          .speak("Hey, your soul is listening. This is how I sound.");
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
   }
 }
 

@@ -34,6 +34,9 @@ dependencies:
   googleapis: ^13.2.0
   device_calendar: ^4.3.1
 
+  # Audio playback (ElevenLabs TTS)
+  audioplayers: ^6.0.0
+
   # Permissions
   permission_handler: ^11.3.1
 
