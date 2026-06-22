@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../core/constants.dart';
 import '../providers/soul_provider.dart';
 import '../providers/intent_provider.dart';
 import '../providers/morning_briefing_provider.dart';
 import '../providers/persona_provider.dart';
+import '../services/notification_service.dart';
 import '../widgets/soul_orb.dart';
 import '../widgets/transcript_tile.dart';
 import '../widgets/waveform_widget.dart';
@@ -23,7 +25,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(soulProvider.notifier).initialize();
+      _maybeGenerateMorningBriefing();
+      _maybeNotifyOverdueIntents();
     });
+  }
+
+  Future<void> _maybeNotifyOverdueIntents() async {
+    try {
+      final intents = await ref.read(intentProvider.future);
+      final overdueCount = intents.where((i) => i.isOpen && i.ageDays >= 2).length;
+      if (overdueCount > 0) {
+        await NotificationService.showOverdueIntentsReminder(overdueCount);
+      }
+    } catch (_) {}
+  }
+
+  void _maybeGenerateMorningBriefing() {
+    final hour = DateTime.now().hour;
+    if (hour < 6 || hour >= 12) return;
+    final briefing = ref.read(morningBriefingProvider).valueOrNull;
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (briefing == null || briefing.date != today) {
+      ref.read(morningBriefingProvider.notifier).generate().ignore();
+    }
   }
 
   @override
@@ -32,6 +56,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: const _AppDrawer(),
       appBar: AppBar(
         backgroundColor: AppColors.background,
         title: Row(
@@ -653,6 +678,154 @@ class _OpenIntentsChip extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ─── Navigation Drawer ────────────────────────────────────────────────────
+
+class _AppDrawer extends StatelessWidget {
+  const _AppDrawer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: AppColors.surfaceElevated,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Row(
+                children: [
+                  const Text('✦', style: TextStyle(fontSize: 22, color: AppColors.amber)),
+                  const SizedBox(width: 10),
+                  Text(
+                    'SoulSync',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: AppColors.border, height: 1),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _DrawerItem(
+                    icon: Icons.home_rounded,
+                    label: 'Today',
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  _DrawerItem(
+                    icon: Icons.bar_chart_rounded,
+                    label: 'Insights',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/insights');
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.check_box_outlined,
+                    label: 'Commitments',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/intents');
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.edit_note_rounded,
+                    label: 'Thought Journal',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/thought-journal');
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.people_rounded,
+                    label: 'People',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/relationships');
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.psychology_rounded,
+                    label: 'Reflections',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/introspection');
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.auto_stories_outlined,
+                    label: 'Memory',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/memory');
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.view_week_rounded,
+                    label: 'Weekly Digest',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/weekly-digest');
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.nightlight_round_outlined,
+                    label: 'Nightly Review',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/review');
+                    },
+                  ),
+                  const Divider(color: AppColors.border, height: 24),
+                  _DrawerItem(
+                    icon: Icons.settings_outlined,
+                    label: 'Settings',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/settings');
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _DrawerItem({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, size: 20, color: AppColors.textSecondary),
+      title: Text(
+        label,
+        style: GoogleFonts.inter(
+          fontSize: 14,
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
     );
   }
 }

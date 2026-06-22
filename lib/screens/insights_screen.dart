@@ -134,7 +134,10 @@ class InsightsScreen extends ConsumerWidget {
               data: (people) {
                 final weekPeople = _weekPeople(data.weekMemories, people);
                 if (weekPeople.isEmpty) return const SizedBox.shrink();
-                return _PeopleChipsCard(names: weekPeople);
+                return _PeopleChipsCard(
+                  names: weekPeople,
+                  onTap: () => Navigator.pushNamed(context, '/relationships'),
+                );
               },
             ),
             const SizedBox(height: 16),
@@ -372,54 +375,67 @@ class _StatItem extends StatelessWidget {
 
 class _PeopleChipsCard extends StatelessWidget {
   final List<String> names;
-  const _PeopleChipsCard({required this.names});
+  final VoidCallback? onTap;
+  const _PeopleChipsCard({required this.names, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(16),
-        border: const Border.fromBorderSide(
-            BorderSide(color: AppColors.border, width: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'PEOPLE IN YOUR LIFE',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-              letterSpacing: 0.8,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(16),
+          border: const Border.fromBorderSide(
+              BorderSide(color: AppColors.border, width: 0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'PEOPLE IN YOUR LIFE',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textTertiary,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                if (onTap != null) ...[
+                  const Spacer(),
+                  const Icon(Icons.chevron_right_rounded,
+                      size: 14, color: AppColors.textTertiary),
+                ],
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: names
-                .map((n) => Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.amberDim,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        n,
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: AppColors.amber,
-                          fontWeight: FontWeight.w500,
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: names
+                  .map((n) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.amberDim,
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                      ),
-                    ))
-                .toList(),
-          ),
-        ],
+                        child: Text(
+                          n,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: AppColors.amber,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ],
+        ),
       ),
     );
   }

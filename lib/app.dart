@@ -15,6 +15,8 @@ import 'screens/relationships_screen.dart';
 import 'screens/introspection_screen.dart';
 import 'screens/morning_briefing_screen.dart';
 
+import 'screens/weekly_digest_screen.dart';
+
 class SoulSyncApp extends ConsumerWidget {
   const SoulSyncApp({super.key});
 
@@ -38,6 +40,7 @@ class SoulSyncApp extends ConsumerWidget {
         '/insights': (_) => const InsightsScreen(),
         '/relationships': (_) => const RelationshipsScreen(),
         '/introspection': (_) => const IntrospectionScreen(),
+        '/weekly-digest': (_) => const WeeklyDigestScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/morning-briefing') {
