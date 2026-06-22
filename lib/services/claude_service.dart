@@ -9,6 +9,8 @@ import '../models/person.dart';
 import '../models/persona.dart';
 import '../models/emotion.dart';
 import '../models/introspection_entry.dart';
+import '../models/calendar_event_model.dart';
+import '../models/email_brief.dart';
 
 class ClaudeService {
   String _apiKey;
@@ -323,6 +325,8 @@ Return ONLY the single word.
     required MemoryEntry? yesterday,
     required List<Intent> openIntents,
     required Persona persona,
+    List<CalendarEventModel> calendarEvents = const [],
+    List<EmailBrief> emailBriefs = const [],
   }) async {
     final name = userName.isNotEmpty ? userName : 'friend';
     final yesterdaySummary = yesterday?.summary ?? 'No entry for yesterday.';
@@ -333,21 +337,37 @@ Return ONLY the single word.
             .map((i) => '• ${i.text} (${i.ageDays}d old)')
             .join('\n');
 
+    final calendarText = calendarEvents.isEmpty
+        ? ''
+        : '\n\nToday\'s schedule:\n' +
+            calendarEvents
+                .map((e) => '• ${e.timeLabel} — ${e.title}${e.location != null ? ' @ ${e.location}' : ''}')
+                .join('\n');
+
+    final emailText = emailBriefs.isEmpty
+        ? ''
+        : '\n\nUnread emails:\n' +
+            emailBriefs
+                .take(5)
+                .map((e) => '• From ${e.from}: "${e.subject}" — ${e.snippet.length > 80 ? '${e.snippet.substring(0, 80)}…' : e.snippet}')
+                .join('\n');
+
     return _send(
       systemPrompt: '''
 ${persona.systemPromptModifier}
 You are giving a morning briefing to $name. Be warm and energizing.
-Keep it to 3-4 sentences total, followed by ONE question to carry into the day.
+If there are calendar events, mention the important ones naturally. If there are emails that need attention, highlight them briefly.
+Keep it to 4-5 sentences total, followed by ONE question to carry into the day.
 Speak naturally, not like a report.
 ''',
       messages: [
         {
           'role': 'user',
           'content':
-              'Yesterday: $yesterdaySummary\n\nOpen commitments:\n$intentsText\n\nGive me my morning briefing.',
+              'Yesterday: $yesterdaySummary\n\nOpen commitments:\n$intentsText$calendarText$emailText\n\nGive me my morning briefing.',
         },
       ],
-      maxTokens: 200,
+      maxTokens: 250,
     );
   }
 
